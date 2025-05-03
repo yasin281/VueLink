@@ -1,35 +1,109 @@
 package com.tekhmos.vuelinghelp
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.LocationManager
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
 
+data class DeviceInfo(
+    val endpointId: String,
+    val name: String,
+    var isConnected: Boolean
+)
+
+data class ChatMessage(
+    val from: String,
+    val message: String
+)
+
+class NearbyViewModel : ViewModel() {
+    private val _devices = MutableStateFlow<Map<String, DeviceInfo>>(emptyMap())
+    val devices: StateFlow<Map<String, DeviceInfo>> = _devices
+
+    private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
+    val messages: StateFlow<List<ChatMessage>> = _messages
+
+    fun addOrUpdateDevice(endpointId: String, name: String, isConnected: Boolean) {
+        _devices.value = _devices.value.toMutableMap().apply {
+            this[endpointId] = DeviceInfo(endpointId, name, isConnected)
+        }
+    }
+
+    fun markConnected(endpointId: String, connected: Boolean) {
+        _devices.value = _devices.value.toMutableMap().apply {
+            val device = this[endpointId]
+            if (device != null) {
+                this[endpointId] = device.copy(isConnected = connected)
+            }
+        }
+    }
+
+    fun removeDevice(endpointId: String) {
+        _devices.value = _devices.value.toMutableMap().apply {
+            remove(endpointId)
+        }
+    }
+
+    fun addMessage(from: String, msg: String) {
+        _messages.value = _messages.value + ChatMessage(from, msg)
+    }
+}
+
+
+
+
 class MainActivity : ComponentActivity() {
 
-    private val serviceId = "com.tekhmos.vuelinghelp.SERVICE"
+
+    private val serviceId = "com.tuapp.nearbydemo.SERVICE"
     private val strategy = Strategy.P2P_CLUSTER
     private val userName = "User${System.currentTimeMillis()}"
 
+
+    private val viewModel: NearbyViewModel by viewModels()
+
     private val requiredPermissions = arrayOf(
         Manifest.permission.ACCESS_FINE_LOCATION,
-        Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+        Manifest.permission.ACCESS_WIFI_STATE,
+        Manifest.permission.CHANGE_WIFI_STATE,
+        Manifest.permission.NEARBY_WIFI_DEVICES,
         Manifest.permission.BLUETOOTH_SCAN,
         Manifest.permission.BLUETOOTH_ADVERTISE,
         Manifest.permission.BLUETOOTH_CONNECT
     )
 
+    private var currentEndpointId: String? = null
+
+    private lateinit var appContext: ComponentActivity
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        if (permissions.all { it.value }) {
-            startNearby()
+        val allGranted = permissions.all { it.value }
+        if (allGranted) {
+            ensureLocationAndStartNearby()
         } else {
             Toast.makeText(this, "Permisos necesarios no concedidos", Toast.LENGTH_LONG).show()
         }
@@ -37,19 +111,50 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        checkPermissionsAndStart()
+
+        setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
+                    PermissionUI(
+                        requiredPermissions = requiredPermissions,
+                        onPermissionsChecked = {
+                            ensureLocationAndStartNearby()
+                        },
+                        onRequestPermissions = {
+                            permissionLauncher.launch(requiredPermissions)
+                        },
+                        onOpenSettings = {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", packageName, null)
+                            }
+                            startActivity(intent)
+                        }
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    DeviceList(viewModel)
+                    Spacer(Modifier.height(16.dp))
+                    ChatUI(viewModel = viewModel, onSend = { msg -> sendMessageToAll(msg) })
+                }
+            }
+        }
     }
 
-    private fun checkPermissionsAndStart() {
-        val allGranted = requiredPermissions.all {
-            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+    private fun ensureLocationAndStartNearby() {
+        val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
+        val enabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+
+        if (!enabled) {
+            Toast.makeText(this, "Activa la ubicación del dispositivo", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+            return
         }
 
-        if (allGranted) {
-            startNearby()
-        } else {
-            permissionLauncher.launch(requiredPermissions)
-        }
+        startNearby()
     }
 
     private fun startNearby() {
@@ -105,32 +210,177 @@ class MainActivity : ComponentActivity() {
 
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
             if (result.status.isSuccess) {
+                viewModel.markConnected(endpointId, true)
                 Toast.makeText(applicationContext, "Conectado con $endpointId", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(applicationContext, "Conexión fallida con $endpointId", Toast.LENGTH_SHORT).show()
             }
         }
 
         override fun onDisconnected(endpointId: String) {
+            viewModel.markConnected(endpointId, false)
             Toast.makeText(applicationContext, "Desconectado de $endpointId", Toast.LENGTH_SHORT).show()
         }
     }
 
     private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
+            viewModel.addOrUpdateDevice(endpointId, info.endpointName, false)
             Nearby.getConnectionsClient(applicationContext)
                 .requestConnection(userName, endpointId, connectionLifecycleCallback)
         }
 
-        override fun onEndpointLost(endpointId: String) {}
+        override fun onEndpointLost(endpointId: String) {
+            viewModel.removeDevice(endpointId)
+        }
     }
 
     private val payloadCallback = object : PayloadCallback() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
-            val message = payload.asBytes()?.toString(Charsets.UTF_8)
-            Toast.makeText(applicationContext, "Mensaje recibido: $message", Toast.LENGTH_SHORT).show()
+            val msg = payload.asBytes()?.toString(Charsets.UTF_8)
+            if (msg != null) {
+                viewModel.addMessage(endpointId, msg)
+            }
         }
 
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {}
     }
+
+    private fun sendMessageToAll(message: String) {
+        val payload = Payload.fromBytes(message.toByteArray(Charsets.UTF_8))
+        viewModel.devices.value.forEach { (endpointId, device) ->
+            if (device.isConnected) {
+                Nearby.getConnectionsClient(applicationContext)
+                    .sendPayload(endpointId, payload)
+            }
+        }
+        viewModel.addMessage("me", message)
+    }
 }
+@Composable
+fun PermissionUI(
+    requiredPermissions: Array<String>,
+    onPermissionsChecked: () -> Unit,
+    onRequestPermissions: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    val context = LocalContext.current
+    val missingPermissions = remember {
+        derivedStateOf {
+            requiredPermissions.filter {
+                ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+            }
+        }
+    }
+
+    Column {
+        if (missingPermissions.value.isEmpty()) {
+            Text("Permisos OK ✅")
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onPermissionsChecked) {
+                Text("Iniciar Nearby")
+            }
+        } else {
+            Text("Permisos faltantes ❌")
+            Spacer(Modifier.height(8.dp))
+            missingPermissions.value.forEach {
+                Text(it)
+            }
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onRequestPermissions) {
+                Text("Solicitar permisos")
+            }
+            Button(onClick = onOpenSettings) {
+                Text("Abrir ajustes")
+            }
+        }
+    }
+}
+
+@Composable
+fun DeviceList(viewModel: NearbyViewModel) {
+    val devices by viewModel.devices.collectAsState()
+
+    Column {
+        Text("Dispositivos cercanos:", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+
+        if (devices.isEmpty()) {
+            Text("Ninguno detectado aún...")
+        } else {
+            devices.values.forEach { device ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (device.isConnected)
+                            MaterialTheme.colorScheme.secondaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(device.name)
+                        Text(if (device.isConnected) "Conectado ✅" else "No conectado ❌")
+                    }
+                }
+            }
+        }
+    }
+}
+@Composable
+fun ChatUI(
+    viewModel: NearbyViewModel,
+    onSend: (String) -> Unit
+) {
+    val messages by viewModel.messages.collectAsState()
+    var text by remember { mutableStateOf("") }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text("Chat", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(8.dp))
+
+        Column(modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth()
+            .padding(8.dp)) {
+            messages.forEach { msg ->
+                val align = if (msg.from == "me") Arrangement.End else Arrangement.Start
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = align) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (msg.from == "me")
+                                MaterialTheme.colorScheme.primaryContainer
+                            else
+                                MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        modifier = Modifier.padding(4.dp)
+                    ) {
+                        Text(
+                            msg.message,
+                            modifier = Modifier.padding(8.dp),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Mensaje") },
+                modifier = Modifier.weight(1f).padding(end = 8.dp)
+            )
+            Button(onClick = {
+                if (text.isNotBlank()) {
+                    onSend(text)
+                    text = ""
+                }
+            }) {
+                Text("Enviar")
+            }
+        }
+    }
+}
+
+
