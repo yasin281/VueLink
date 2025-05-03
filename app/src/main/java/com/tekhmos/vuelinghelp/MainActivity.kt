@@ -20,49 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.ViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
-import com.tekhmos.vuelinghelp.model.ChatMessage
-import com.tekhmos.vuelinghelp.model.DeviceInfo
-
-class NearbyViewModel : ViewModel() {
-    private val _devices = MutableStateFlow<Map<String, DeviceInfo>>(emptyMap())
-    val devices: StateFlow<Map<String, DeviceInfo>> = _devices
-
-    private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
-    val messages: StateFlow<List<ChatMessage>> = _messages
-
-    fun addOrUpdateDevice(endpointId: String, name: String, isConnected: Boolean) {
-        _devices.value = _devices.value.toMutableMap().apply {
-            this[endpointId] = DeviceInfo(endpointId, name, isConnected)
-        }
-    }
-
-    fun markConnected(endpointId: String, connected: Boolean) {
-        _devices.value = _devices.value.toMutableMap().apply {
-            val device = this[endpointId]
-            if (device != null) {
-                this[endpointId] = device.copy(isConnected = connected)
-            }
-        }
-    }
-
-    fun removeDevice(endpointId: String) {
-        _devices.value = _devices.value.toMutableMap().apply {
-            remove(endpointId)
-        }
-    }
-
-    fun addMessage(from: String, msg: String) {
-        _messages.value = _messages.value + ChatMessage(from, msg)
-    }
-}
-
-
-
+import com.tekhmos.vuelinghelp.viewmodel.NearbyViewModel
 
 class MainActivity : ComponentActivity() {
 
@@ -84,10 +44,6 @@ class MainActivity : ComponentActivity() {
         Manifest.permission.BLUETOOTH_ADVERTISE,
         Manifest.permission.BLUETOOTH_CONNECT
     )
-
-    private var currentEndpointId: String? = null
-
-    private lateinit var appContext: ComponentActivity
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
