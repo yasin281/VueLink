@@ -25,17 +25,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
-
-data class DeviceInfo(
-    val endpointId: String,
-    val name: String,
-    var isConnected: Boolean
-)
-
-data class ChatMessage(
-    val from: String,
-    val message: String
-)
+import com.tekhmos.vuelinghelp.model.ChatMessage
+import com.tekhmos.vuelinghelp.model.DeviceInfo
 
 class NearbyViewModel : ViewModel() {
     private val _devices = MutableStateFlow<Map<String, DeviceInfo>>(emptyMap())
