@@ -36,3 +36,7 @@ Hacemos una app nativa Android que usa:
 | Almacenamiento local | `SharedPreferences` |
 | UI minimalista | Jetpack Compose o XML clásico (según preferencia) |
 | Iconos y logros | Recursos ligeros SVG o Lottie (si hay tiempo) |
+
+
+
+ - COMMIT1842: WORKING COMM

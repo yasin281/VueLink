@@ -76,9 +76,9 @@ class NearbyViewModel : ViewModel() {
 class MainActivity : ComponentActivity() {
 
 
-    private val serviceId = "com.tuapp.nearbydemo.SERVICE"
+    private val serviceId = "com.tekhmos.vuelinghelp.SERVICE"
     private val strategy = Strategy.P2P_CLUSTER
-    private val userName = "User${System.currentTimeMillis()}"
+    private val userName = android.os.Build.MODEL
 
 
     private val viewModel: NearbyViewModel by viewModels()
