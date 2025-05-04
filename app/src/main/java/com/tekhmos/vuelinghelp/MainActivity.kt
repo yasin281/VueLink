@@ -36,6 +36,13 @@ import com.tekhmos.vuelinghelp.viewmodel.NearbyViewModel
 import org.json.JSONObject
 import kotlinx.coroutines.delay
 
+import java.text.SimpleDateFormat
+import java.util.*
+
+fun formatTime(timestamp: Long): String {
+    val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
+    return sdf.format(Date(timestamp))
+}
 
 
 class MainActivity : ComponentActivity() {
@@ -448,45 +455,65 @@ class MainActivity : ComponentActivity() {
                     .verticalScroll(rememberScrollState())
             ) {
                 messages.forEach { msg ->
-                    val align = if (msg.from == "me") Arrangement.End else Arrangement.Start
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = align) {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = when {
-                                    msg.type == "message" && msg.infoLevel == "critical" -> MaterialTheme.colorScheme.errorContainer
-                                    msg.type == "message" && msg.from == "me" -> MaterialTheme.colorScheme.primaryContainer
-                                    msg.type == "flight-info" -> MaterialTheme.colorScheme.secondaryContainer
-                                    else -> MaterialTheme.colorScheme.surfaceVariant
-                                }
-                            ),
-                            modifier = Modifier.padding(4.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(8.dp)) {
-                                // 👇 NUEVA LÍNEA: mostrar nombre del dispositivo en negrita
-                                Text(
-                                    text = if (msg.from == "me") "Yo" else msg.from,
-                                    fontWeight = FontWeight.Bold
-                                )
+                    val isMe = msg.from == "me"
+                    val align = if (isMe) Arrangement.End else Arrangement.Start
 
-                                when (msg.type) {
-                                    "message" -> {
-                                        Text(msg.content)
-                                        if (msg.infoLevel == "critical") {
-                                            Text("⚠️ CRÍTICO", style = MaterialTheme.typography.labelSmall)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = align
+                    ) {
+                        Column(
+                            horizontalAlignment = if (isMe) Alignment.End else Alignment.Start,
+                            modifier = Modifier.widthIn(max = 300.dp)
+                        ) {
+                            // Nombre del remitente SIEMPRE alineado a la izquierda
+                            Text(
+                                text = "${if (isMe) "Yo" else msg.from}",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.align(Alignment.Start)
+                            )
+
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = when {
+                                        msg.type == "message" && msg.infoLevel == "critical" -> MaterialTheme.colorScheme.errorContainer
+                                        msg.type == "message" && isMe -> MaterialTheme.colorScheme.primaryContainer
+                                        msg.type == "flight-info" -> MaterialTheme.colorScheme.secondaryContainer
+                                        else -> MaterialTheme.colorScheme.surfaceVariant
+                                    }
+                                ),
+                                modifier = Modifier.padding(4.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    when (msg.type) {
+                                        "message" -> {
+                                            Text(msg.content)
+                                            if (msg.infoLevel == "critical") {
+                                                Text("⚠️ CRÍTICO", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
+
+                                        "flight-info" -> {
+                                            Text("✈️ Info vuelo ${msg.flightNumber}")
+                                            msg.newGate?.takeIf { it != "9999" }?.let {
+                                                Text("➡️ Nueva puerta: $it")
+                                            }
+                                            msg.newDeparture?.takeIf { it != "9999" }?.let {
+                                                Text("🕐 Nueva salida: $it")
+                                            }
+                                            msg.newArrival?.takeIf { it != "9999" }?.let {
+                                                Text("🕘 Nueva llegada: $it")
+                                            }
                                         }
                                     }
-                                    "flight-info" -> {
-                                        Text("✈️ Info vuelo ${msg.flightNumber}")
-                                        msg.newGate?.takeIf { it != "9999" }?.let {
-                                            Text("➡️ Nueva puerta: $it")
-                                        }
-                                        msg.newDeparture?.takeIf { it != "9999" }?.let {
-                                            Text("🕐 Nueva salida: $it")
-                                        }
-                                        msg.newArrival?.takeIf { it != "9999" }?.let {
-                                            Text("🕘 Nueva llegada: $it")
-                                        }
-                                    }
+
+                                    // Hora debajo del mensaje
+                                    Text(
+                                        text = formatTime(msg.timestamp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        modifier = Modifier.align(Alignment.End)
+                                    )
                                 }
                             }
                         }
@@ -514,5 +541,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
 
 }
