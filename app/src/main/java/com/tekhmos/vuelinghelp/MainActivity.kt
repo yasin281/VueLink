@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,16 +35,10 @@ import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
 import com.tekhmos.vuelinghelp.ui.VisualUI1
 import com.tekhmos.vuelinghelp.ui.VuelingDarkColorScheme
-import com.tekhmos.vuelinghelp.ui.VuelingGray
-import com.tekhmos.vuelinghelp.ui.VuelingYellow
 import com.tekhmos.vuelinghelp.ui.mainScreen
 import com.tekhmos.vuelinghelp.viewmodel.MessageData
 import com.tekhmos.vuelinghelp.viewmodel.NearbyViewModel
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 import java.text.SimpleDateFormat
@@ -61,7 +57,6 @@ class MainActivity : ComponentActivity() {
     private val userName: String by lazy { getUsername() }
     private val seenMessages = mutableSetOf<String>()
     private val viewModel: NearbyViewModel by viewModels()
-    private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
 
     private val requiredPermissions = arrayOf( // solicitar en runtime
         Manifest.permission.ACCESS_FINE_LOCATION,
@@ -202,7 +197,6 @@ class MainActivity : ComponentActivity() {
         if (!enabled) {
             Toast.makeText(this, "Activa la ubicación del dispositivo", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-            return
         }
         startNearby()
     }
@@ -418,21 +412,29 @@ class MainActivity : ComponentActivity() {
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            PermissionUI(
-                requiredPermissions = requiredPermissions,
-                onPermissionsChecked = {
-                    checkLocationAndStartNearby()
-                },
-                onRequestPermissions = {
-                    permissionLauncher.launch(requiredPermissions)
-                },
-                onOpenSettings = {
-                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                        data = Uri.fromParts("package", packageName, null)
-                    }
-                    startActivity(intent)
+            val context = LocalContext.current
+
+            // Refrescamos cuando se pulsa el botón
+            fun refreshNearby() {
+                checkLocationAndStartNearby()
+                Toast.makeText(context, "Actualizando dispositivos cercanos...", Toast.LENGTH_SHORT).show()
+            }
+
+            // Botón de recarga
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(onClick = { refreshNearby() }) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refrescar"
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Actualizar")
                 }
-            )
+            }
+
             Spacer(Modifier.height(16.dp))
 
             // Text area para información crítica
@@ -464,46 +466,6 @@ class MainActivity : ComponentActivity() {
             DeviceList(viewModel = viewModel)
             Spacer(Modifier.height(16.dp))
             ChatUI(viewModel = viewModel, onSend = { msg -> sendMessage(msg) })
-        }
-    }
-
-    @Composable
-    fun PermissionUI(
-        requiredPermissions: Array<String>,
-        onPermissionsChecked: () -> Unit,
-        onRequestPermissions: () -> Unit,
-        onOpenSettings: () -> Unit
-    ) {
-        val context = LocalContext.current
-        val missingPermissions = remember {
-            derivedStateOf {
-                requiredPermissions.filter {
-                    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-                }
-            }
-        }
-
-        Column {
-            if (missingPermissions.value.isEmpty()) {
-                Text("Permisos OK ✅")
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = onPermissionsChecked) {
-                    Text("Iniciar Nearby")
-                }
-            } else {
-                Text("Permisos faltantes ❌")
-                Spacer(Modifier.height(8.dp))
-                missingPermissions.value.forEach {
-                    Text(it)
-                }
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = onRequestPermissions) {
-                    Text("Solicitar permisos")
-                }
-                Button(onClick = onOpenSettings) {
-                    Text("Abrir ajustes")
-                }
-            }
         }
     }
 
