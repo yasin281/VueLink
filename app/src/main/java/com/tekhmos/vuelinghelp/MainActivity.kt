@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
-import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
@@ -28,6 +27,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -49,7 +49,6 @@ fun formatTime(timestamp: Long): String {
     return sdf.format(Date(timestamp))
 }
 
-
 class MainActivity : ComponentActivity() {
 
     private val serviceId = "com.tekhmos.vuelinghelp.SERVICE"
@@ -58,7 +57,7 @@ class MainActivity : ComponentActivity() {
     private val seenMessages = mutableSetOf<String>()
     private val viewModel: NearbyViewModel by viewModels()
 
-    private val requiredPermissions = arrayOf( // solicitar en runtime
+    private val requiredPermissions = arrayOf(
         Manifest.permission.ACCESS_FINE_LOCATION,
         Manifest.permission.NEARBY_WIFI_DEVICES,
         Manifest.permission.BLUETOOTH_SCAN,
@@ -66,21 +65,6 @@ class MainActivity : ComponentActivity() {
         Manifest.permission.BLUETOOTH_CONNECT
     )
 
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.all { it.value }
-        if (allGranted) {
-            checkLocationAndStartNearby()
-        } else {
-            Toast.makeText(this, "Activa 'Dispositivos Cercanos' y 'Ubicación' en ajustes.", Toast.LENGTH_LONG).show()
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.fromParts("package", packageName, null)
-            }
-            startActivity(intent)
-
-        }
-    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -154,7 +138,7 @@ class MainActivity : ComponentActivity() {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
-                .background(MaterialTheme.colorScheme.background), // Fondo del tema oscuro
+                .background(MaterialTheme.colorScheme.background),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -162,14 +146,14 @@ class MainActivity : ComponentActivity() {
                 "Para continuar, necesitas conceder permisos de ubicación y dispositivos cercanos.",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(bottom = 16.dp),
-                color = MaterialTheme.colorScheme.onBackground // Texto que respeta el contraste
+                color = MaterialTheme.colorScheme.onBackground
             )
 
             Button(
                 onClick = onRequestPermissions,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,        // Amarillo Vueling (en dark)
-                    contentColor = MaterialTheme.colorScheme.onPrimary         // Texto oscuro sobre amarillo
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 )
             ) {
                 Text("Conceder permisos")
@@ -225,7 +209,6 @@ class MainActivity : ComponentActivity() {
             }
             .addOnFailureListener { e ->
                 Log.e("Nearby", "Error al anunciar", e)
-                //    Toast.makeText(this, "Error al anunciar: ${e.message}", Toast.LENGTH_LONG).show()
             }
     }
 
@@ -406,66 +389,83 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun MainAppContent() {
         var criticalInfo by remember { mutableStateOf(" --- CRITICAL INFO ---") }
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            val context = LocalContext.current
-
-            // Refrescamos cuando se pulsa el botón
-            fun refreshNearby() {
-                checkLocationAndStartNearby()
-                Toast.makeText(context, "Actualizando dispositivos cercanos...", Toast.LENGTH_SHORT).show()
-            }
-
-            // Botón de recarga
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Button(onClick = { refreshNearby() }) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Refrescar"
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Actualizar")
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // Text area para información crítica
-            Text(
-                text = "Información Importante",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.error // Color rojo para indicar importancia
-            )
-            Spacer(Modifier.height(4.dp))
-
-            // Text area para información crítica
-            Card(
+        val context = LocalContext.current
+        checkLocationAndStartNearby()
+        MaterialTheme(colorScheme = VuelingDarkColorScheme) {
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), // Fondo rojo claro
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp), // Elevación para destacar
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error) // Borde rojo
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(16.dp)
             ) {
+                // Refrescar cuando se pulsa
+                fun refreshNearby() {
+                    checkLocationAndStartNearby()
+                    Toast.makeText(
+                        context,
+                        "Actualizando dispositivos cercanos...",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+                // Botón de recarga
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = { refreshNearby() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refrescar",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Actualizar")
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Título  información crítica
                 Text(
-                    text = criticalInfo,
+                    text = "Información Importante",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                // Información crítica
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(8.dp),
-                    color = MaterialTheme.colorScheme.onErrorContainer, // Color de texto sobre el fondo rojo claro
-                    style = MaterialTheme.typography.bodyLarge // Texto un poco más grande
-                )
+                        .padding(bottom = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                ) {
+                    Text(
+                        text = criticalInfo,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+
+                DeviceList(viewModel = viewModel)
+                Spacer(Modifier.height(16.dp))
+                ChatUI(viewModel = viewModel, onSend = { msg -> sendMessage(msg) })
             }
-            DeviceList(viewModel = viewModel)
-            Spacer(Modifier.height(16.dp))
-            ChatUI(viewModel = viewModel, onSend = { msg -> sendMessage(msg) })
         }
     }
 
@@ -473,7 +473,7 @@ class MainActivity : ComponentActivity() {
     fun DeviceList(viewModel: NearbyViewModel) {
         val devices by viewModel.devices.collectAsState()
         Column {
-            Text("Dispositivos cercanos:", style = MaterialTheme.typography.titleMedium)
+            Text("Dispositivos cercanos:", style = MaterialTheme.typography.titleMedium, color = Color.White)
             Spacer(Modifier.height(4.dp))
             LazyColumn(
                 modifier = Modifier.heightIn(max = 90.dp)
@@ -514,8 +514,18 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        Column(modifier = Modifier.fillMaxSize()) {
-            Text("Chat", style = MaterialTheme.typography.titleLarge)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            Text(
+                "Chat",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
             Spacer(Modifier.height(8.dp))
 
             LazyColumn(
@@ -538,8 +548,9 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.widthIn(max = 300.dp)
                         ) {
                             Text(
-                                text = "${if (isMe) "Yo" else msg.from}",
+                                text = if (isMe) "Yo" else msg.from,
                                 fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground,
                                 style = MaterialTheme.typography.labelSmall,
                                 modifier = Modifier.align(Alignment.Start)
                             )
@@ -581,6 +592,7 @@ class MainActivity : ComponentActivity() {
                                     Text(
                                         text = formatTime(msg.timestamp),
                                         style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.align(Alignment.End)
                                     )
                                 }
