@@ -22,7 +22,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.nearby.Nearby
@@ -32,7 +31,6 @@ import com.tekhmos.vuelinghelp.ui.VuelingColorScheme
 import com.tekhmos.vuelinghelp.ui.mainScreen
 import com.tekhmos.vuelinghelp.viewmodel.NearbyViewModel
 import org.json.JSONObject
-import kotlin.math.log
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
@@ -94,15 +92,15 @@ class MainActivity : ComponentActivity() {
                 val showLoginScreen = remember { mutableStateOf(savedUsername.isNullOrBlank()) }
 
                 MaterialTheme(colorScheme = darkColorScheme()) {
-                        if (showLoginScreen.value) {
-                            LoginScreen(onLogin = { username ->
-                                saveUsername(username)
-                                showLoginScreen.value = false
-                            })
-                        } else {
-                            MaterialTheme(colorScheme = VuelingColorScheme){
-                                MainAppContent()
-                            }
+                    if (showLoginScreen.value) {
+                        LoginScreen(onLogin = { username ->
+                            saveUsername(username)
+                            showLoginScreen.value = false
+                        })
+                    } else {
+                        MaterialTheme(colorScheme = VuelingColorScheme) {
+                            MainAppContent()
+                        }
                         }
                 }
             }
