@@ -12,10 +12,12 @@ import android.util.Log
 import android.widget.Toast
 import androidx.compose.ui.text.font.FontWeight
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,9 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
-//import com.tekhmos.vuelinghelp.model.ChatMessage
 import com.tekhmos.vuelinghelp.ui.VisualUI1
-import com.tekhmos.vuelinghelp.ui.VuelingColorScheme
+import com.tekhmos.vuelinghelp.ui.VuelingDarkColorScheme
+import com.tekhmos.vuelinghelp.ui.VuelingGray
+import com.tekhmos.vuelinghelp.ui.VuelingYellow
 import com.tekhmos.vuelinghelp.ui.mainScreen
 import com.tekhmos.vuelinghelp.viewmodel.MessageData
 import com.tekhmos.vuelinghelp.viewmodel.NearbyViewModel
@@ -83,44 +86,60 @@ class MainActivity : ComponentActivity() {
 
         }
     }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         setContent {
             // Usamos un estado para controlar qué pantalla mostrar
             var showSplashScreen by remember { mutableStateOf(true) }
+            var hasPermissions by remember { mutableStateOf(hasAllPermissions()) }
 
             LaunchedEffect(Unit) {
                 delay(2000)
                 showSplashScreen = false
             }
 
-            if (showSplashScreen) {
-                MaterialTheme(colorScheme = mainScreen) {
-                    VisualUI1()
-                }
-            } else {
-                val sharedPref = getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-                val savedUsername = sharedPref.getString("username", null)
-                if (hasAllPermissions()) {
-                    checkLocationAndStartNearby()
-                } else {
-                    permissionLauncher.launch(requiredPermissions)
-                }
-                val showLoginScreen = remember { mutableStateOf(savedUsername.isNullOrBlank()) }
+            // Permission launcher
+            val permissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestMultiplePermissions()
+            ) { permissions ->
+                hasPermissions = permissions.values.all { it }
+            }
 
-                MaterialTheme(colorScheme = darkColorScheme()) {
-                    if (showLoginScreen.value) {
-                        LoginScreen(onLogin = { username ->
-                            saveUsername(username)
-                            showLoginScreen.value = false
-                        })
-                    } else {
-                        MaterialTheme(colorScheme = VuelingColorScheme) {
+            // Theme wrapper
+            MaterialTheme(colorScheme = mainScreen) {
+                when {
+                    showSplashScreen -> {
+                        MaterialTheme(colorScheme = VuelingDarkColorScheme) {
+                            // Pantalla de carga
+                            VisualUI1()
+                        }
+                    }
+
+                    !hasPermissions -> {
+                        MaterialTheme(colorScheme = VuelingDarkColorScheme) {
+                            PermissionDeniedScreen(onRequestPermissions = {
+                                permissionLauncher.launch(requiredPermissions)
+                            })
+                        }
+                    }
+
+                    else -> {
+                        val sharedPref = getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                        val savedUsername = sharedPref.getString("username", null)
+                        val showLoginScreen = remember { mutableStateOf(savedUsername.isNullOrBlank()) }
+
+                        if (showLoginScreen.value) {
+                            MaterialTheme(colorScheme = VuelingDarkColorScheme) {
+                                LoginScreen(onLogin = { username ->
+                                    saveUsername(username)
+                                    showLoginScreen.value = false
+                                })
+                            }
+                        } else {
                             MainAppContent()
                         }
-                        }
+                    }
                 }
             }
         }
@@ -129,6 +148,37 @@ class MainActivity : ComponentActivity() {
     private fun hasAllPermissions(): Boolean {
         return requiredPermissions.all {
             ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    @Composable
+    fun PermissionDeniedScreen(
+        onRequestPermissions: () -> Unit
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .background(MaterialTheme.colorScheme.background), // Fondo del tema oscuro
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                "Para continuar, necesitas conceder permisos de ubicación y dispositivos cercanos.",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(bottom = 16.dp),
+                color = MaterialTheme.colorScheme.onBackground // Texto que respeta el contraste
+            )
+
+            Button(
+                onClick = onRequestPermissions,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,        // Amarillo Vueling (en dark)
+                    contentColor = MaterialTheme.colorScheme.onPrimary         // Texto oscuro sobre amarillo
+                )
+            ) {
+                Text("Conceder permisos")
+            }
         }
     }
 
@@ -302,7 +352,6 @@ class MainActivity : ComponentActivity() {
 
     }
 
-
     @Composable
     fun LoginScreen(onLogin: (String) -> Unit) {
         var username by remember { mutableStateOf("") }
@@ -311,16 +360,33 @@ class MainActivity : ComponentActivity() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(16.dp)
+                .background(MaterialTheme.colorScheme.background),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text("Introduce tu nombre de usuario", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                "Introduce tu nombre de usuario",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
             Spacer(modifier = Modifier.height(16.dp))
             OutlinedTextField(
                 value = username,
                 onValueChange = { username = it },
-                label = { Text("Nombre de usuario") },
+                label = {
+                    Text("Nombre de usuario", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        cursorColor = MaterialTheme.colorScheme.primary,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
+                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -332,7 +398,11 @@ class MainActivity : ComponentActivity() {
                         Toast.makeText(context, "El nombre de usuario no puede estar vacío", Toast.LENGTH_SHORT).show()
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
             ) {
                 Text("Acceder")
             }
@@ -440,8 +510,6 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun DeviceList(viewModel: NearbyViewModel) {
         val devices by viewModel.devices.collectAsState()
-
-
         Column {
             Text("Dispositivos cercanos:", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
@@ -470,7 +538,6 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-
     fun ChatUI(
         viewModel: NearbyViewModel,
         onSend: (String) -> Unit
@@ -559,7 +626,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-
             }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
