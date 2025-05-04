@@ -12,14 +12,18 @@ import android.util.Log
 import android.widget.Toast
 import androidx.compose.ui.text.font.FontWeight
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,17 +33,12 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
-//import com.tekhmos.vuelinghelp.model.ChatMessage
 import com.tekhmos.vuelinghelp.ui.VisualUI1
-import com.tekhmos.vuelinghelp.ui.VuelingColorScheme
+import com.tekhmos.vuelinghelp.ui.VuelingDarkColorScheme
 import com.tekhmos.vuelinghelp.ui.mainScreen
 import com.tekhmos.vuelinghelp.viewmodel.MessageData
 import com.tekhmos.vuelinghelp.viewmodel.NearbyViewModel
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 import java.text.SimpleDateFormat
@@ -58,7 +57,6 @@ class MainActivity : ComponentActivity() {
     private val userName: String by lazy { getUsername() }
     private val seenMessages = mutableSetOf<String>()
     private val viewModel: NearbyViewModel by viewModels()
-    private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
 
     private val requiredPermissions = arrayOf( // solicitar en runtime
         Manifest.permission.ACCESS_FINE_LOCATION,
@@ -83,44 +81,60 @@ class MainActivity : ComponentActivity() {
 
         }
     }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         setContent {
             // Usamos un estado para controlar qué pantalla mostrar
             var showSplashScreen by remember { mutableStateOf(true) }
+            var hasPermissions by remember { mutableStateOf(hasAllPermissions()) }
 
             LaunchedEffect(Unit) {
                 delay(2000)
                 showSplashScreen = false
             }
 
-            if (showSplashScreen) {
-                MaterialTheme(colorScheme = mainScreen) {
-                    VisualUI1()
-                }
-            } else {
-                val sharedPref = getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-                val savedUsername = sharedPref.getString("username", null)
-                if (hasAllPermissions()) {
-                    checkLocationAndStartNearby()
-                } else {
-                    permissionLauncher.launch(requiredPermissions)
-                }
-                val showLoginScreen = remember { mutableStateOf(savedUsername.isNullOrBlank()) }
+            // Permission launcher
+            val permissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestMultiplePermissions()
+            ) { permissions ->
+                hasPermissions = permissions.values.all { it }
+            }
 
-                MaterialTheme(colorScheme = darkColorScheme()) {
-                    if (showLoginScreen.value) {
-                        LoginScreen(onLogin = { username ->
-                            saveUsername(username)
-                            showLoginScreen.value = false
-                        })
-                    } else {
-                        MaterialTheme(colorScheme = VuelingColorScheme) {
+            // Theme wrapper
+            MaterialTheme(colorScheme = mainScreen) {
+                when {
+                    showSplashScreen -> {
+                        MaterialTheme(colorScheme = VuelingDarkColorScheme) {
+                            // Pantalla de carga
+                            VisualUI1()
+                        }
+                    }
+
+                    !hasPermissions -> {
+                        MaterialTheme(colorScheme = VuelingDarkColorScheme) {
+                            PermissionDeniedScreen(onRequestPermissions = {
+                                permissionLauncher.launch(requiredPermissions)
+                            })
+                        }
+                    }
+
+                    else -> {
+                        val sharedPref = getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                        val savedUsername = sharedPref.getString("username", null)
+                        val showLoginScreen = remember { mutableStateOf(savedUsername.isNullOrBlank()) }
+
+                        if (showLoginScreen.value) {
+                            MaterialTheme(colorScheme = VuelingDarkColorScheme) {
+                                LoginScreen(onLogin = { username ->
+                                    saveUsername(username)
+                                    showLoginScreen.value = false
+                                })
+                            }
+                        } else {
                             MainAppContent()
                         }
-                        }
+                    }
                 }
             }
         }
@@ -129,6 +143,37 @@ class MainActivity : ComponentActivity() {
     private fun hasAllPermissions(): Boolean {
         return requiredPermissions.all {
             ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    @Composable
+    fun PermissionDeniedScreen(
+        onRequestPermissions: () -> Unit
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .background(MaterialTheme.colorScheme.background), // Fondo del tema oscuro
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                "Para continuar, necesitas conceder permisos de ubicación y dispositivos cercanos.",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(bottom = 16.dp),
+                color = MaterialTheme.colorScheme.onBackground // Texto que respeta el contraste
+            )
+
+            Button(
+                onClick = onRequestPermissions,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,        // Amarillo Vueling (en dark)
+                    contentColor = MaterialTheme.colorScheme.onPrimary         // Texto oscuro sobre amarillo
+                )
+            ) {
+                Text("Conceder permisos")
+            }
         }
     }
 
@@ -152,7 +197,6 @@ class MainActivity : ComponentActivity() {
         if (!enabled) {
             Toast.makeText(this, "Activa la ubicación del dispositivo", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-            return
         }
         startNearby()
     }
@@ -302,7 +346,6 @@ class MainActivity : ComponentActivity() {
 
     }
 
-
     @Composable
     fun LoginScreen(onLogin: (String) -> Unit) {
         var username by remember { mutableStateOf("") }
@@ -311,16 +354,33 @@ class MainActivity : ComponentActivity() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(16.dp)
+                .background(MaterialTheme.colorScheme.background),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text("Introduce tu nombre de usuario", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                "Introduce tu nombre de usuario",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
             Spacer(modifier = Modifier.height(16.dp))
             OutlinedTextField(
                 value = username,
                 onValueChange = { username = it },
-                label = { Text("Nombre de usuario") },
+                label = {
+                    Text("Nombre de usuario", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        cursorColor = MaterialTheme.colorScheme.primary,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
+                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -332,7 +392,11 @@ class MainActivity : ComponentActivity() {
                         Toast.makeText(context, "El nombre de usuario no puede estar vacío", Toast.LENGTH_SHORT).show()
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
             ) {
                 Text("Acceder")
             }
@@ -348,21 +412,29 @@ class MainActivity : ComponentActivity() {
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            PermissionUI(
-                requiredPermissions = requiredPermissions,
-                onPermissionsChecked = {
-                    checkLocationAndStartNearby()
-                },
-                onRequestPermissions = {
-                    permissionLauncher.launch(requiredPermissions)
-                },
-                onOpenSettings = {
-                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                        data = Uri.fromParts("package", packageName, null)
-                    }
-                    startActivity(intent)
+            val context = LocalContext.current
+
+            // Refrescamos cuando se pulsa el botón
+            fun refreshNearby() {
+                checkLocationAndStartNearby()
+                Toast.makeText(context, "Actualizando dispositivos cercanos...", Toast.LENGTH_SHORT).show()
+            }
+
+            // Botón de recarga
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(onClick = { refreshNearby() }) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refrescar"
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Actualizar")
                 }
-            )
+            }
+
             Spacer(Modifier.height(16.dp))
 
             // Text area para información crítica
@@ -398,50 +470,8 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun PermissionUI(
-        requiredPermissions: Array<String>,
-        onPermissionsChecked: () -> Unit,
-        onRequestPermissions: () -> Unit,
-        onOpenSettings: () -> Unit
-    ) {
-        val context = LocalContext.current
-        val missingPermissions = remember {
-            derivedStateOf {
-                requiredPermissions.filter {
-                    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-                }
-            }
-        }
-
-        Column {
-            if (missingPermissions.value.isEmpty()) {
-                Text("Permisos OK ✅")
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = onPermissionsChecked) {
-                    Text("Iniciar Nearby")
-                }
-            } else {
-                Text("Permisos faltantes ❌")
-                Spacer(Modifier.height(8.dp))
-                missingPermissions.value.forEach {
-                    Text(it)
-                }
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = onRequestPermissions) {
-                    Text("Solicitar permisos")
-                }
-                Button(onClick = onOpenSettings) {
-                    Text("Abrir ajustes")
-                }
-            }
-        }
-    }
-
-    @Composable
     fun DeviceList(viewModel: NearbyViewModel) {
         val devices by viewModel.devices.collectAsState()
-
-
         Column {
             Text("Dispositivos cercanos:", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
@@ -470,7 +500,6 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-
     fun ChatUI(
         viewModel: NearbyViewModel,
         onSend: (String) -> Unit
@@ -559,7 +588,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-
             }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

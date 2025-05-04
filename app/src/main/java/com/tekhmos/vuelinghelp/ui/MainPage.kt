@@ -1,6 +1,7 @@
 package com.tekhmos.vuelinghelp.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,7 +18,9 @@ import com.tekhmos.vuelinghelp.R
 @Composable
 fun VisualUI1() {
     BoxWithConstraints(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
         val maxWidth = maxWidth
@@ -30,19 +33,18 @@ fun VisualUI1() {
                 painter = painterResource(id = R.drawable.logo),
                 contentDescription = "Logo",
                 modifier = Modifier
-                    .size((maxWidth * 0.5f).coerceAtLeast(150.dp)) // Ajusta al 50% del ancho con un mínimo de 150.dp
+                    .size((maxWidth * 0.5f).coerceAtLeast(150.dp))
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Texto "Iniciando..."
             Text(
                 text = "Iniciando...",
                 style = TextStyle(
-                    color = MaterialTheme.colorScheme.primary, // Usa el color del tema activo
-                    fontSize = ((maxWidth * 0.05f).coerceAtLeast(16.dp).value).sp, // Ajusta la fuente con un mínimo de 16.sp
-                    textAlign = TextAlign.Center
-                )
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = ((maxWidth * 0.05f).coerceAtLeast(16.dp).value).sp
+                ),
+                textAlign = TextAlign.Center
             )
         }
     }
