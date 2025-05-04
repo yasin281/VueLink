@@ -1,6 +1,7 @@
 package com.tekhmos.vuelinghelp
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
@@ -18,8 +19,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.nearby.Nearby
@@ -28,11 +31,9 @@ import com.tekhmos.vuelinghelp.viewmodel.NearbyViewModel
 
 class MainActivity : ComponentActivity() {
 
-
     private val serviceId = "com.tekhmos.vuelinghelp.SERVICE"
     private val strategy = Strategy.P2P_CLUSTER
-    private val userName = android.os.Build.MODEL
-
+    private val userName: String by lazy { getUsername() }
 
     private val viewModel: NearbyViewModel by viewModels()
 
@@ -61,34 +62,35 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val sharedPref = getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val savedUsername = sharedPref.getString("username", null)
+
         setContent {
+            val showLoginScreen = remember { mutableStateOf(savedUsername.isNullOrBlank()) }
+
             MaterialTheme(colorScheme = darkColorScheme()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp)
-                ) {
-                    PermissionUI(
-                        requiredPermissions = requiredPermissions,
-                        onPermissionsChecked = {
-                            ensureLocationAndStartNearby()
-                        },
-                        onRequestPermissions = {
-                            permissionLauncher.launch(requiredPermissions)
-                        },
-                        onOpenSettings = {
-                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = Uri.fromParts("package", packageName, null)
-                            }
-                            startActivity(intent)
-                        }
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    DeviceList(viewModel)
-                    Spacer(Modifier.height(16.dp))
-                    ChatUI(viewModel = viewModel, onSend = { msg -> sendMessageToAll(msg) })
+                if (showLoginScreen.value) {
+                    LoginScreen(onLogin = { username ->
+                        saveUsername(username)
+                        showLoginScreen.value = false
+                    })
+                } else {
+                    MainAppContent()
                 }
             }
+        }
+    }
+
+    private fun getUsername(): String {
+        val sharedPref = getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        return sharedPref.getString("username", android.os.Build.MODEL) ?: android.os.Build.MODEL
+    }
+
+    private fun saveUsername(username: String) {
+        val sharedPref = getSharedPreferences("user_prefs", Context.MODE_PRIVATE) ?: return
+        with(sharedPref.edit()) {
+            putString("username", username)
+            apply()
         }
     }
 
@@ -126,7 +128,7 @@ class MainActivity : ComponentActivity() {
                 options
             )
             .addOnSuccessListener {
-                Toast.makeText(this, "Anunciando Nearby", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Anunciando Nearby como $userName", Toast.LENGTH_SHORT).show()
             }
             .addOnFailureListener { e ->
                 Log.e("Nearby", "Error al anunciar", e)
@@ -203,137 +205,201 @@ class MainActivity : ComponentActivity() {
         }
         viewModel.addMessage("me", message)
     }
-}
-@Composable
-fun PermissionUI(
-    requiredPermissions: Array<String>,
-    onPermissionsChecked: () -> Unit,
-    onRequestPermissions: () -> Unit,
-    onOpenSettings: () -> Unit
-) {
-    val context = LocalContext.current
-    val missingPermissions = remember {
-        derivedStateOf {
-            requiredPermissions.filter {
-                ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-            }
-        }
-    }
 
-    Column {
-        if (missingPermissions.value.isEmpty()) {
-            Text("Permisos OK ✅")
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = onPermissionsChecked) {
-                Text("Iniciar Nearby")
-            }
-        } else {
-            Text("Permisos faltantes ❌")
-            Spacer(Modifier.height(8.dp))
-            missingPermissions.value.forEach {
-                Text(it)
-            }
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = onRequestPermissions) {
-                Text("Solicitar permisos")
-            }
-            Button(onClick = onOpenSettings) {
-                Text("Abrir ajustes")
-            }
-        }
-    }
-}
+    @Composable
+    fun LoginScreen(onLogin: (String) -> Unit) {
+        var username by remember { mutableStateOf("") }
+        val context = LocalContext.current
 
-@Composable
-fun DeviceList(viewModel: NearbyViewModel) {
-    val devices by viewModel.devices.collectAsState()
-
-    Column {
-        Text("Dispositivos cercanos:", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-
-        if (devices.isEmpty()) {
-            Text("Ninguno detectado aún...")
-        } else {
-            devices.values.forEach { device ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (device.isConnected)
-                            MaterialTheme.colorScheme.secondaryContainer
-                        else MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(device.name)
-                        Text(if (device.isConnected) "Conectado ✅" else "No conectado ❌")
-                    }
-                }
-            }
-        }
-    }
-}
-@Composable
-fun ChatUI(
-    viewModel: NearbyViewModel,
-    onSend: (String) -> Unit
-) {
-    val messages by viewModel.messages.collectAsState()
-    var text by remember { mutableStateOf("") }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        Text("Chat", style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.height(8.dp))
-
-        androidx.compose.foundation.layout.Column(
+        Column(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(8.dp)
-                .verticalScroll(rememberScrollState()) // ESTA LÍNEA SE HA AÑADIDO
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            messages.forEach { msg ->
-                val align = if (msg.from == "me") Arrangement.End else Arrangement.Start
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = align) {
+            Text("Introduce tu nombre de usuario", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("Nombre de usuario") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    if (username.isNotBlank()) {
+                        onLogin(username)
+                    } else {
+                        Toast.makeText(context, "El nombre de usuario no puede estar vacío", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Acceder")
+            }
+        }
+    }
+
+    @Composable
+    fun MainAppContent() {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            PermissionUI(
+                requiredPermissions = requiredPermissions,
+                onPermissionsChecked = {
+                    ensureLocationAndStartNearby()
+                },
+                onRequestPermissions = {
+                    permissionLauncher.launch(requiredPermissions)
+                },
+                onOpenSettings = {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", packageName, null)
+                    }
+                    startActivity(intent)
+                }
+            )
+            Spacer(Modifier.height(16.dp))
+            DeviceList(viewModel)
+            Spacer(Modifier.height(16.dp))
+            ChatUI(viewModel = viewModel, onSend = { msg -> sendMessageToAll(msg) })
+        }
+    }
+
+    @Composable
+    fun PermissionUI(
+        requiredPermissions: Array<String>,
+        onPermissionsChecked: () -> Unit,
+        onRequestPermissions: () -> Unit,
+        onOpenSettings: () -> Unit
+    ) {
+        val context = LocalContext.current
+        val missingPermissions = remember {
+            derivedStateOf {
+                requiredPermissions.filter {
+                    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                }
+            }
+        }
+
+        Column {
+            if (missingPermissions.value.isEmpty()) {
+                Text("Permisos OK ✅")
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = onPermissionsChecked) {
+                    Text("Iniciar Nearby")
+                }
+            } else {
+                Text("Permisos faltantes ❌")
+                Spacer(Modifier.height(8.dp))
+                missingPermissions.value.forEach {
+                    Text(it)
+                }
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = onRequestPermissions) {
+                    Text("Solicitar permisos")
+                }
+                Button(onClick = onOpenSettings) {
+                    Text("Abrir ajustes")
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun DeviceList(viewModel: NearbyViewModel) {
+        val devices by viewModel.devices.collectAsState()
+
+        Column {
+            Text("Dispositivos cercanos:", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+
+            if (devices.isEmpty()) {
+                Text("Ninguno detectado aún...")
+            } else {
+                devices.values.forEach { device ->
                     Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (msg.from == "me")
-                                MaterialTheme.colorScheme.primaryContainer
-                            else
-                                MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                        modifier = Modifier.padding(4.dp)
-                    ) {
-                        Text(
-                            msg.message,
-                            modifier = Modifier.padding(8.dp),
-                            style = MaterialTheme.typography.bodyMedium
+                            containerColor = if (device.isConnected)
+                                MaterialTheme.colorScheme.secondaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant
                         )
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(device.name)
+                            Text(if (device.isConnected) "Conectado ✅" else "No conectado ❌")
+                        }
                     }
                 }
             }
         }
+    }
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                label = { Text("Mensaje") },
-                modifier = Modifier.weight(1f).padding(end = 8.dp)
-            )
-            Button(onClick = {
-                if (text.isNotBlank()) {
-                    onSend(text)
-                    text = ""
+    @Composable
+    fun ChatUI(
+        viewModel: NearbyViewModel,
+        onSend: (String) -> Unit
+    ) {
+        val messages by viewModel.messages.collectAsState()
+        var text by remember { mutableStateOf("") }
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            Text("Chat", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(8.dp))
+
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(8.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                messages.forEach { msg ->
+                    val align = if (msg.from == "me") Arrangement.End else Arrangement.Start
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = align) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (msg.from == "me")
+                                    MaterialTheme.colorScheme.primaryContainer
+                                else
+                                    MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            modifier = Modifier.padding(4.dp)
+                        ) {
+                            Text(
+                                msg.message,
+                                modifier = Modifier.padding(8.dp),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
                 }
-            }) {
-                Text("Enviar")
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Mensaje") },
+                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                )
+                Button(onClick = {
+                    if (text.isNotBlank()) {
+                        onSend(text)
+                        text = ""
+                    }
+                }) {
+                    Text("Enviar")
+                }
             }
         }
     }
 }
-
-
-
