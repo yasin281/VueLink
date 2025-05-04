@@ -17,7 +17,7 @@
     <application
         android:theme="@style/Theme.VuelingHelp"
         android:allowBackup="true"
-        android:label="NearbyDemo"
+        android:label="VueLink"
         android:supportsRtl="true">
         <activity android:name=".MainActivity"
             android:exported="true">
