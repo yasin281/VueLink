@@ -15,9 +15,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,8 +35,12 @@ import com.tekhmos.vuelinghelp.ui.VuelingColorScheme
 import com.tekhmos.vuelinghelp.ui.mainScreen
 import com.tekhmos.vuelinghelp.viewmodel.MessageData
 import com.tekhmos.vuelinghelp.viewmodel.NearbyViewModel
-import org.json.JSONObject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 import java.text.SimpleDateFormat
 import java.util.*
@@ -52,6 +58,7 @@ class MainActivity : ComponentActivity() {
     private val userName: String by lazy { getUsername() }
     private val seenMessages = mutableSetOf<String>()
     private val viewModel: NearbyViewModel by viewModels()
+    private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
 
     private val requiredPermissions = arrayOf( // solicitar en runtime
         Manifest.permission.ACCESS_FINE_LOCATION,
@@ -76,6 +83,7 @@ class MainActivity : ComponentActivity() {
 
         }
     }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -83,10 +91,9 @@ class MainActivity : ComponentActivity() {
             // Usamos un estado para controlar qué pantalla mostrar
             var showSplashScreen by remember { mutableStateOf(true) }
 
-            // Manejar el retraso de 2 segundos para la splash screen
             LaunchedEffect(Unit) {
-                delay(2000) // Esperar 2 segundos
-                showSplashScreen = false // Luego mostrar la pantalla principal
+                delay(2000)
+                showSplashScreen = false
             }
 
             if (showSplashScreen) {
@@ -334,6 +341,8 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun MainAppContent() {
+        var criticalInfo by remember { mutableStateOf(" --- CRITICAL INFO ---") }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -355,7 +364,34 @@ class MainActivity : ComponentActivity() {
                 }
             )
             Spacer(Modifier.height(16.dp))
-            DeviceList(viewModel)
+
+            // Text area para información crítica
+            Text(
+                text = "Información Importante",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.error // Color rojo para indicar importancia
+            )
+            Spacer(Modifier.height(4.dp))
+
+            // Text area para información crítica
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), // Fondo rojo claro
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp), // Elevación para destacar
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error) // Borde rojo
+            ) {
+                Text(
+                    text = criticalInfo,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    color = MaterialTheme.colorScheme.onErrorContainer, // Color de texto sobre el fondo rojo claro
+                    style = MaterialTheme.typography.bodyLarge // Texto un poco más grande
+                )
+            }
+            DeviceList(viewModel = viewModel)
             Spacer(Modifier.height(16.dp))
             ChatUI(viewModel = viewModel, onSend = { msg -> sendMessage(msg) })
         }
@@ -408,25 +444,24 @@ class MainActivity : ComponentActivity() {
 
         Column {
             Text("Dispositivos cercanos:", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-
-            if (devices.isEmpty()) {
-                Text("Ninguno detectado aún...")
-            } else {
-                devices.values.forEach { device ->
+            Spacer(Modifier.height(4.dp))
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 90.dp)
+            ) {
+                items(devices.values.toList()) { device ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp),
+                            .padding(vertical = 2.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = if (device.isConnected)
                                 MaterialTheme.colorScheme.secondaryContainer
                             else MaterialTheme.colorScheme.surfaceVariant
                         )
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(device.name)
-                            Text(if (device.isConnected) "Conectado ✅" else "No conectado ❌")
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            Text(device.name, style = MaterialTheme.typography.bodyMedium)
+                            Text(if (device.isConnected) "Conectado ✅" else "No conectado ❌", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -442,17 +477,24 @@ class MainActivity : ComponentActivity() {
     ) {
         val messages by viewModel.messages.collectAsState()
         var text by remember { mutableStateOf("") }
+        val listState = rememberLazyListState()
+
+        LaunchedEffect(messages.size) {
+            if (messages.isNotEmpty()) {
+                listState.scrollToItem(messages.lastIndex)
+            }
+        }
 
         Column(modifier = Modifier.fillMaxSize()) {
             Text("Chat", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(8.dp))
 
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(8.dp)
-                    .verticalScroll(rememberScrollState())
+                    .padding(8.dp),
+                state = listState
             ) {
                 messages.forEach { msg ->
                     val isMe = msg.from == "me"
@@ -541,6 +583,4 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-
 }
