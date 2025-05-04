@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.ui.text.font.FontWeight
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,12 +27,16 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
+//import com.tekhmos.vuelinghelp.model.ChatMessage
 import com.tekhmos.vuelinghelp.ui.VisualUI1
 import com.tekhmos.vuelinghelp.ui.VuelingColorScheme
 import com.tekhmos.vuelinghelp.ui.mainScreen
+import com.tekhmos.vuelinghelp.viewmodel.MessageData
 import com.tekhmos.vuelinghelp.viewmodel.NearbyViewModel
 import org.json.JSONObject
 import kotlinx.coroutines.delay
+
+
 
 class MainActivity : ComponentActivity() {
 
@@ -226,7 +231,30 @@ class MainActivity : ComponentActivity() {
             if (originDevice == userName || seenMessages.contains(messageId)) return
 
             seenMessages.add(messageId)
-            viewModel.addMessage(originDevice, json.toString())
+
+            val type = json.optString("type")
+            val messageData = when (type) {
+                "message" -> MessageData(
+                    from = originDevice,
+                    timestamp = timestamp,
+                    type = "message",
+                    content = json.optString("message"),
+                    infoLevel = json.optString("infoLevel")
+                )
+                "flight-info" -> MessageData(
+                    from = originDevice,
+                    timestamp = timestamp,
+                    type = "flight-info",
+                    content = "",
+                    flightNumber = json.optString("flightNumber"),
+                    newGate = json.optString("newGate"),
+                    newDeparture = json.optString("newDeparture"),
+                    newArrival = json.optString("newArrival")
+                )
+                else -> null
+            }
+
+            messageData?.let { viewModel.addStructuredMessage(it) }
 
             // Reenvío
             val relay = Payload.fromBytes(json.toString().toByteArray(Charsets.UTF_8))
@@ -240,7 +268,7 @@ class MainActivity : ComponentActivity() {
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {}
     }
 
-    fun sendMessage(content: String, infoLevel: String = "normal") {
+    private fun sendMessage(content: String, infoLevel: String = "normal") {
         val json = JSONObject().apply {
             put("timestamp", System.currentTimeMillis())
             put("originDevice", userName)
@@ -256,7 +284,8 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        viewModel.addMessage("me", json.toString())
+        viewModel.addMessage("me", content, infoLevel)
+
     }
 
 
@@ -369,6 +398,7 @@ class MainActivity : ComponentActivity() {
     fun DeviceList(viewModel: NearbyViewModel) {
         val devices by viewModel.devices.collectAsState()
 
+
         Column {
             Text("Dispositivos cercanos:", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
@@ -398,6 +428,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
+
     fun ChatUI(
         viewModel: NearbyViewModel,
         onSend: (String) -> Unit
@@ -409,7 +440,7 @@ class MainActivity : ComponentActivity() {
             Text("Chat", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(8.dp))
 
-            androidx.compose.foundation.layout.Column(
+            Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
@@ -421,18 +452,43 @@ class MainActivity : ComponentActivity() {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = align) {
                         Card(
                             colors = CardDefaults.cardColors(
-                                containerColor = if (msg.from == "me")
-                                    MaterialTheme.colorScheme.primaryContainer
-                                else
-                                    MaterialTheme.colorScheme.surfaceVariant
+                                containerColor = when {
+                                    msg.type == "message" && msg.infoLevel == "critical" -> MaterialTheme.colorScheme.errorContainer
+                                    msg.type == "message" && msg.from == "me" -> MaterialTheme.colorScheme.primaryContainer
+                                    msg.type == "flight-info" -> MaterialTheme.colorScheme.secondaryContainer
+                                    else -> MaterialTheme.colorScheme.surfaceVariant
+                                }
                             ),
                             modifier = Modifier.padding(4.dp)
                         ) {
-                            Text(
-                                msg.message,
-                                modifier = Modifier.padding(8.dp),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                // 👇 NUEVA LÍNEA: mostrar nombre del dispositivo en negrita
+                                Text(
+                                    text = if (msg.from == "me") "Yo" else msg.from,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                when (msg.type) {
+                                    "message" -> {
+                                        Text(msg.content)
+                                        if (msg.infoLevel == "critical") {
+                                            Text("⚠️ CRÍTICO", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                    "flight-info" -> {
+                                        Text("✈️ Info vuelo ${msg.flightNumber}")
+                                        msg.newGate?.takeIf { it != "9999" }?.let {
+                                            Text("➡️ Nueva puerta: $it")
+                                        }
+                                        msg.newDeparture?.takeIf { it != "9999" }?.let {
+                                            Text("🕐 Nueva salida: $it")
+                                        }
+                                        msg.newArrival?.takeIf { it != "9999" }?.let {
+                                            Text("🕘 Nueva llegada: $it")
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -443,7 +499,9 @@ class MainActivity : ComponentActivity() {
                     value = text,
                     onValueChange = { text = it },
                     label = { Text("Mensaje") },
-                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp)
                 )
                 Button(onClick = {
                     if (text.isNotBlank()) {
@@ -456,4 +514,5 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
 }
