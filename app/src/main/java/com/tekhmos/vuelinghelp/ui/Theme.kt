@@ -11,13 +11,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-val VuelingColorScheme = darkColorScheme(
-    primary = VuelingYellow,       // Color principal: Amarillo Vueling
-    onPrimary = VuelingBlack,      // Texto sobre primary: negro (buen contraste)
-    background = VuelingBlack,             // Fondo general: blanco
-    onBackground = Color.White,   // Texto sobre fondo: negro
-    surface = Color.White,                // Superficies (tarjetas, etc): blanco
-    onSurface = Color.White       // Texto sobre superficies: negro
+val VuelingDarkColorScheme = darkColorScheme(
+    primary = VuelingYellow,           // Amarillo Vueling en el tema oscuro
+    onPrimary = VuelingBlack,          // Texto en negro sobre el amarillo
+    secondary = VuelingGray,           // Gris oscuro para los elementos secundarios
+    onSecondary = VuelingWhite,        // Blanco para el texto en los elementos secundarios
+    background = VuelingBlack,         // Fondo negro para el tema oscuro
+    onBackground = VuelingLightGray,   // Texto blanco sobre fondo negro
+    surface = VuelingGray,             // Superficies en gris oscuro
+    onSurface = VuelingWhite,          // Texto blanco en las superficies
+    surfaceVariant = VuelingLightGray, // Superficie variante en gris claro
+    onSurfaceVariant = VuelingGray,    // Texto gris oscuro en la variante de superficie
+    primaryContainer = VuelingYellow,  // Contenedor primario amarillo
+    onPrimaryContainer = VuelingGray,  // Texto gris oscuro sobre el contenedor amarillo
+    secondaryContainer = VuelingGray,  // Contenedor secundario gris oscuro
+    onSecondaryContainer = VuelingWhite // Texto blanco en el contenedor secundario
 )
 
 
@@ -43,7 +51,7 @@ fun VuelingHelpTheme(
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
 
-        darkTheme -> VuelingColorScheme
+        darkTheme -> VuelingDarkColorScheme
         else -> mainScreen
     }
 
