@@ -28,20 +28,19 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
 import com.tekhmos.vuelinghelp.viewmodel.NearbyViewModel
+import org.json.JSONObject
+import kotlin.math.log
 
 class MainActivity : ComponentActivity() {
 
     private val serviceId = "com.tekhmos.vuelinghelp.SERVICE"
     private val strategy = Strategy.P2P_CLUSTER
     private val userName: String by lazy { getUsername() }
-
+    private val seenMessages = mutableSetOf<String>()
     private val viewModel: NearbyViewModel by viewModels()
 
-    private val requiredPermissions = arrayOf(
+    private val requiredPermissions = arrayOf( // solicitar en runtime
         Manifest.permission.ACCESS_FINE_LOCATION,
-        Manifest.permission.ACCESS_BACKGROUND_LOCATION,
-        Manifest.permission.ACCESS_WIFI_STATE,
-        Manifest.permission.CHANGE_WIFI_STATE,
         Manifest.permission.NEARBY_WIFI_DEVICES,
         Manifest.permission.BLUETOOTH_SCAN,
         Manifest.permission.BLUETOOTH_ADVERTISE,
@@ -53,9 +52,14 @@ class MainActivity : ComponentActivity() {
     ) { permissions ->
         val allGranted = permissions.all { it.value }
         if (allGranted) {
-            ensureLocationAndStartNearby()
+            checkLocationAndStartNearby()
         } else {
-            Toast.makeText(this, "Permisos necesarios no concedidos", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Activa 'Dispositivos Cercanos' y 'Ubicación' en ajustes.", Toast.LENGTH_LONG).show()
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", packageName, null)
+            }
+            startActivity(intent)
+
         }
     }
 
@@ -64,7 +68,11 @@ class MainActivity : ComponentActivity() {
 
         val sharedPref = getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         val savedUsername = sharedPref.getString("username", null)
-
+        if (hasAllPermissions()) {
+            checkLocationAndStartNearby()
+        } else {
+            permissionLauncher.launch(requiredPermissions)
+        }
         setContent {
             val showLoginScreen = remember { mutableStateOf(savedUsername.isNullOrBlank()) }
 
@@ -78,6 +86,11 @@ class MainActivity : ComponentActivity() {
                     MainAppContent()
                 }
             }
+        }
+    }
+    private fun hasAllPermissions(): Boolean {
+        return requiredPermissions.all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
     }
 
@@ -94,17 +107,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun ensureLocationAndStartNearby() {
+    private fun checkLocationAndStartNearby() {
         val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
         val enabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
                 locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-
         if (!enabled) {
             Toast.makeText(this, "Activa la ubicación del dispositivo", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
             return
         }
-
         startNearby()
     }
 
@@ -128,11 +139,11 @@ class MainActivity : ComponentActivity() {
                 options
             )
             .addOnSuccessListener {
-                Toast.makeText(this, "Anunciando Nearby como $userName", Toast.LENGTH_SHORT).show()
+                Log.d("Nearby", "Anuncio iniciado")
             }
             .addOnFailureListener { e ->
                 Log.e("Nearby", "Error al anunciar", e)
-                Toast.makeText(this, "Error al anunciar: ${e.message}", Toast.LENGTH_LONG).show()
+                //    Toast.makeText(this, "Error al anunciar: ${e.message}", Toast.LENGTH_LONG).show()
             }
     }
 
@@ -145,7 +156,7 @@ class MainActivity : ComponentActivity() {
                 options
             )
             .addOnSuccessListener {
-                Toast.makeText(this, "Descubriendo dispositivos", Toast.LENGTH_SHORT).show()
+                Log.d("Nearby", "Descubrimiento iniciado")
             }
             .addOnFailureListener { e ->
                 Log.e("Nearby", "Error al descubrir", e)
@@ -162,13 +173,13 @@ class MainActivity : ComponentActivity() {
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
             if (result.status.isSuccess) {
                 viewModel.markConnected(endpointId, true)
-                Toast.makeText(applicationContext, "Conectado con $endpointId", Toast.LENGTH_SHORT).show()
+                Log.d("Nearby", "Conectado a ${viewModel.devices.value[endpointId]?.name}")
             }
         }
 
         override fun onDisconnected(endpointId: String) {
             viewModel.markConnected(endpointId, false)
-            Toast.makeText(applicationContext, "Desconectado de $endpointId", Toast.LENGTH_SHORT).show()
+            Log.d("Nearby", "Desconectado de $endpointId")
         }
     }
 
@@ -186,25 +197,49 @@ class MainActivity : ComponentActivity() {
 
     private val payloadCallback = object : PayloadCallback() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
-            val msg = payload.asBytes()?.toString(Charsets.UTF_8)
-            if (msg != null) {
-                viewModel.addMessage(endpointId, msg)
+            val raw = payload.asBytes()?.toString(Charsets.UTF_8) ?: return
+
+            val json = JSONObject(raw)
+            val timestamp = json.optLong("timestamp")
+            val originDevice = json.optString("originDevice")
+            val messageId = "$originDevice:$timestamp"
+
+            if (originDevice == userName || seenMessages.contains(messageId)) return
+
+            seenMessages.add(messageId)
+            viewModel.addMessage(originDevice, json.toString())
+
+            // Reenvío
+            val relay = Payload.fromBytes(json.toString().toByteArray(Charsets.UTF_8))
+            viewModel.devices.value.forEach { (id, device) ->
+                if (device.isConnected && id != endpointId) {
+                    Nearby.getConnectionsClient(applicationContext).sendPayload(id, relay)
+                }
             }
         }
 
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {}
     }
 
-    private fun sendMessageToAll(message: String) {
-        val payload = Payload.fromBytes(message.toByteArray(Charsets.UTF_8))
+    fun sendMessage(content: String, infoLevel: String = "normal") {
+        val json = JSONObject().apply {
+            put("timestamp", System.currentTimeMillis())
+            put("originDevice", userName)
+            put("type", "message")
+            put("infoLevel", infoLevel)
+            put("message", content)
+        }
+
+        val payload = Payload.fromBytes(json.toString().toByteArray(Charsets.UTF_8))
         viewModel.devices.value.forEach { (endpointId, device) ->
             if (device.isConnected) {
-                Nearby.getConnectionsClient(applicationContext)
-                    .sendPayload(endpointId, payload)
+                Nearby.getConnectionsClient(applicationContext).sendPayload(endpointId, payload)
             }
         }
-        viewModel.addMessage("me", message)
+
+        viewModel.addMessage("me", json.toString())
     }
+
 
     @Composable
     fun LoginScreen(onLogin: (String) -> Unit) {
@@ -252,7 +287,7 @@ class MainActivity : ComponentActivity() {
             PermissionUI(
                 requiredPermissions = requiredPermissions,
                 onPermissionsChecked = {
-                    ensureLocationAndStartNearby()
+                    checkLocationAndStartNearby()
                 },
                 onRequestPermissions = {
                     permissionLauncher.launch(requiredPermissions)
@@ -267,7 +302,7 @@ class MainActivity : ComponentActivity() {
             Spacer(Modifier.height(16.dp))
             DeviceList(viewModel)
             Spacer(Modifier.height(16.dp))
-            ChatUI(viewModel = viewModel, onSend = { msg -> sendMessageToAll(msg) })
+            ChatUI(viewModel = viewModel, onSend = { msg -> sendMessage(msg) })
         }
     }
 
