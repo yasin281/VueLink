@@ -33,7 +33,6 @@ Cada dispositivo actúa como **receptor y transmisor**, asegurando la propagaci�
 | Comunicación entre móviles | Nearby Connections API         |
 | Almacenamiento local   | SharedPreferences                  |
 | Interfaz de usuario    | Jetpack Compose / XML clásico      |
-| Iconos y animaciones   | SVG ligero / Lottie (opcional)     |
 
 VueLink usa **GATT** para conectar dispositivos cercanos **sin necesidad de Internet**.
 
