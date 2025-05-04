@@ -22,14 +22,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
+import com.tekhmos.vuelinghelp.ui.VisualUI1
+import com.tekhmos.vuelinghelp.ui.VuelingColorScheme
+import com.tekhmos.vuelinghelp.ui.mainScreen
 import com.tekhmos.vuelinghelp.viewmodel.NearbyViewModel
 import org.json.JSONObject
-import kotlin.math.log
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
 
@@ -62,32 +64,49 @@ class MainActivity : ComponentActivity() {
 
         }
     }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val sharedPref = getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-        val savedUsername = sharedPref.getString("username", null)
-        if (hasAllPermissions()) {
-            checkLocationAndStartNearby()
-        } else {
-            permissionLauncher.launch(requiredPermissions)
-        }
         setContent {
-            val showLoginScreen = remember { mutableStateOf(savedUsername.isNullOrBlank()) }
+            // Usamos un estado para controlar qué pantalla mostrar
+            var showSplashScreen by remember { mutableStateOf(true) }
 
-            MaterialTheme(colorScheme = darkColorScheme()) {
-                if (showLoginScreen.value) {
-                    LoginScreen(onLogin = { username ->
-                        saveUsername(username)
-                        showLoginScreen.value = false
-                    })
+            // Manejar el retraso de 2 segundos para la splash screen
+            LaunchedEffect(Unit) {
+                delay(2000) // Esperar 2 segundos
+                showSplashScreen = false // Luego mostrar la pantalla principal
+            }
+
+            if (showSplashScreen) {
+                MaterialTheme(colorScheme = mainScreen) {
+                    VisualUI1()
+                }
+            } else {
+                val sharedPref = getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                val savedUsername = sharedPref.getString("username", null)
+                if (hasAllPermissions()) {
+                    checkLocationAndStartNearby()
                 } else {
-                    MainAppContent()
+                    permissionLauncher.launch(requiredPermissions)
+                }
+                val showLoginScreen = remember { mutableStateOf(savedUsername.isNullOrBlank()) }
+
+                MaterialTheme(colorScheme = darkColorScheme()) {
+                    if (showLoginScreen.value) {
+                        LoginScreen(onLogin = { username ->
+                            saveUsername(username)
+                            showLoginScreen.value = false
+                        })
+                    } else {
+                        MaterialTheme(colorScheme = VuelingColorScheme) {
+                            MainAppContent()
+                        }
+                        }
                 }
             }
         }
     }
+
     private fun hasAllPermissions(): Boolean {
         return requiredPermissions.all {
             ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
