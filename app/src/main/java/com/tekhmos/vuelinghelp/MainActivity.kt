@@ -14,6 +14,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -285,10 +287,13 @@ fun ChatUI(
         Text("Chat", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(8.dp))
 
-        Column(modifier = Modifier
-            .weight(1f)
-            .fillMaxWidth()
-            .padding(8.dp)) {
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(8.dp)
+                .verticalScroll(rememberScrollState()) // ESTA LÍNEA SE HA AÑADIDO
+        ) {
             messages.forEach { msg ->
                 val align = if (msg.from == "me") Arrangement.End else Arrangement.Start
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = align) {
@@ -329,5 +334,6 @@ fun ChatUI(
         }
     }
 }
+
 
 
