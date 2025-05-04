@@ -496,7 +496,7 @@ class MainActivity : ComponentActivity() {
                     .padding(8.dp),
                 state = listState
             ) {
-                messages.forEach { msg ->
+                items(messages) { msg ->
                     val isMe = msg.from == "me"
                     val align = if (isMe) Arrangement.End else Arrangement.Start
 
@@ -508,7 +508,6 @@ class MainActivity : ComponentActivity() {
                             horizontalAlignment = if (isMe) Alignment.End else Alignment.Start,
                             modifier = Modifier.widthIn(max = 300.dp)
                         ) {
-                            // Nombre del remitente SIEMPRE alineado a la izquierda
                             Text(
                                 text = "${if (isMe) "Yo" else msg.from}",
                                 fontWeight = FontWeight.Bold,
@@ -550,7 +549,6 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
 
-                                    // Hora debajo del mensaje
                                     Text(
                                         text = formatTime(msg.timestamp),
                                         style = MaterialTheme.typography.labelSmall,
@@ -561,6 +559,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+
             }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
