@@ -1,6 +1,5 @@
-package com.tekhmos.vuelinghelp.ui.theme
+package com.tekhmos.vuelinghelp.ui
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -9,28 +8,26 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+val VuelingColorScheme = darkColorScheme(
+    primary = VuelingYellow,       // Color principal: Amarillo Vueling
+    onPrimary = VuelingBlack,      // Texto sobre primary: negro (buen contraste)
+    background = VuelingBlack,             // Fondo general: blanco
+    onBackground = Color.White,   // Texto sobre fondo: negro
+    surface = Color.White,                // Superficies (tarjetas, etc): blanco
+    onSurface = Color.White       // Texto sobre superficies: negro
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+val mainScreen = lightColorScheme(
+    primary = Color.Black,           // Texto en negro
+    onPrimary = Color.White,         // Fondo blanco
+    background = Color.White,        // Fondo blanco
+    surface = Color.White,           // Superficie blanca
+    onBackground = Color.Black,      // Texto en negro para el fondo
+    onSurface = Color.Black          // Texto en negro para la superficie
 )
 
 @Composable
@@ -46,8 +43,8 @@ fun VuelingHelpTheme(
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
 
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        darkTheme -> VuelingColorScheme
+        else -> mainScreen
     }
 
     MaterialTheme(
